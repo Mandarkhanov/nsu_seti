@@ -61,10 +61,8 @@ public class Client : IDisposable
     {
         using NetworkStream tcpStream = this.serverConnection.GetStream();
 
-        // Клиент первым шагом отправляет серверу имя файла и размер
         await tcpStream.WriteAsync(Encoding.Default.GetBytes(this.fileName + "/" + this.fileSize));
 
-        // Вторым шагом, клиент ожидает получение подтверждающего сообщения от клиента
         byte[] buffer = new byte[CHUNK_SIZE];
         int readBytes = await tcpStream.ReadAsync(buffer, 0, CHUNK_SIZE);
 

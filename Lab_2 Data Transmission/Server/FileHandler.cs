@@ -29,7 +29,6 @@ public class FileHandler : IDisposable
     {
         using (this)
         {
-            // Сервер первым шагом ожидает получить имя файла и размер от клиента, чтобы создать файл, куда будут писаться данные
             NetworkStream tcpStream = this.client.GetStream();
             byte[] buffer = new byte[CHUNK_SIZE];
             await tcpStream.ReadAsync(buffer, 0, CHUNK_SIZE);
@@ -37,10 +36,8 @@ public class FileHandler : IDisposable
             ParseFileMetadata(buffer);
             CreateFile();
 
-            // Вторым шагом сервер отправляет подтверждающее сообщение "ok" о получении имени и размера получаемого файла
             await tcpStream.WriteAsync(Encoding.Default.GetBytes(OK_MESSAGE), 0, OK_MESSAGE.Length);
 
-            // Замер времени и начало работы счетчика скорости передачи данных
             this.startTime = TimeOnly.FromDateTime(DateTime.Now);
             Timer timer = new Timer((object? o) => { PrintSpeed(); }, null, TIMER_DUE_TIME, TIMER_PERIOD);
 
@@ -50,12 +47,9 @@ public class FileHandler : IDisposable
                 await this.fileStream.WriteAsync(buffer, 0, count);
                 this.readSize += count;
             }
-
-            // Останавливаем работу таймера
+            
             timer.Change(Timeout.Infinite, Timeout.Infinite);
 
-            // Последним шагом пишем клиенту подтверждающее сообщение о получении файла
-                                                                                                    // if (this.fileSize == new FileInfo(this.serverFileName).Length)
             await tcpStream.WriteAsync(Encoding.Default.GetBytes("done"), 0, "done".Length);
 
             PrintSpeed();
