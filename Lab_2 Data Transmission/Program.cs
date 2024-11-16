@@ -14,7 +14,7 @@ public class Program
         }
         else if (args[0] == "client")
         {
-            Client client;
+            Client client = null;
             IPAddress address;
 
             try
@@ -22,14 +22,20 @@ public class Program
                 client = IPAddress.TryParse(args[2], out address)
                     ? new Client(args[1], address, Int32.Parse(args[3]))
                     : new Client(args[1], new DnsEndPoint(args[2], Int32.Parse(args[3])));
+
+                await client.HandleFile();
             }
-            catch (SocketException e)
+            catch (Exception e)
             {
                 Console.WriteLine(e);
-                return;
             }
-
-            await client.HandleFile();
+            finally
+            {
+                if (client != null)
+                {
+                    client.Dispose();
+                }
+            }
         }
         else
         {

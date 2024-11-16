@@ -12,10 +12,20 @@ public class Client : IDisposable
     private string fileName = null;
     private const int CHUNK_SIZE = 8192;
     private const string OK_MESSAGE = "ok";
+    private const long MAX_BYTE_FILE_SIZE = 1024L * 1024L * 1024L * 1024L;
 
     public Client(string path, IPAddress server, int port)
     {
+
+        if (System.Text.Encoding.UTF8.GetByteCount(path) > 4096)
+        {
+            throw new ArgumentException("The file name size in bytes > 4096");
+        }
         this.fileSize = new FileInfo(path).Length;
+        if (this.fileSize > MAX_BYTE_FILE_SIZE)
+        {
+            throw new ArgumentException("The file size is too large (> 1 TB)");
+        }
         string[] pathParts = path.Split(['\\', '/']);
         this.fileName = pathParts.Length > 1
                     ? pathParts[pathParts.Length - 1]
@@ -28,7 +38,15 @@ public class Client : IDisposable
 
     public Client(string path, DnsEndPoint server)
     {
+        if (System.Text.Encoding.UTF8.GetByteCount(path) > 4096)
+        {
+            throw new ArgumentException("The file name size in bytes > 4096");
+        }
         this.fileSize = new FileInfo(path).Length;
+        if (this.fileSize > MAX_BYTE_FILE_SIZE)
+        {
+            throw new ArgumentException("The file size is too large (> 1 TB)");
+        }
         string[] pathParts = path.Split(['\\', '/']);
         this.fileName = pathParts.Length > 1
                     ? pathParts[pathParts.Length - 1]

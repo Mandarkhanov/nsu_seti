@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
@@ -7,9 +8,10 @@ public class FileHandler : IDisposable
 {
     private readonly TcpClient client;
     private FileStream fileStream;
-    private string fileName;
+    private string clientFileName;
+    private string serverFileName;
     private long fileSize;
-    private long readSize;
+    private long readSize = 0L;
     private long lastReadSize;
     private TimeOnly startTime;
     private const int CHUNK_SIZE = 8192;
@@ -28,24 +30,23 @@ public class FileHandler : IDisposable
         using (this)
         {
             // Сервер первым шагом ожидает получить имя файла и размер от клиента, чтобы создать файл, куда будут писаться данные
-            NetworkStream stream = this.client.GetStream();
+            NetworkStream tcpStream = this.client.GetStream();
             byte[] buffer = new byte[CHUNK_SIZE];
-            await stream.ReadAsync(buffer, 0, CHUNK_SIZE);
+            await tcpStream.ReadAsync(buffer, 0, CHUNK_SIZE);
             
             ParseFileMetadata(buffer);
             CreateFile();
 
-            // Вторым шагом сервер отправляет подтверждающее сообщение "ок"
-            await stream.WriteAsync(Encoding.ASCII.GetBytes(OK_MESSAGE), 0, OK_MESSAGE.Length);
+            // Вторым шагом сервер отправляет подтверждающее сообщение "ok" о получении имени и размера получаемого файла
+            await tcpStream.WriteAsync(Encoding.Default.GetBytes(OK_MESSAGE), 0, OK_MESSAGE.Length);
 
             // Замер времени и начало работы счетчика скорости передачи данных
             this.startTime = TimeOnly.FromDateTime(DateTime.Now);
             Timer timer = new Timer((object? o) => { PrintSpeed(); }, null, TIMER_DUE_TIME, TIMER_PERIOD);
 
-
             while (this.readSize < this.fileSize)
             {
-                int count = stream.ReadAsync(buffer, 0, CHUNK_SIZE).Result;
+                int count = tcpStream.ReadAsync(buffer, 0, CHUNK_SIZE).Result;
                 await this.fileStream.WriteAsync(buffer, 0, count);
                 this.readSize += count;
             }
@@ -53,11 +54,12 @@ public class FileHandler : IDisposable
             // Останавливаем работу таймера
             timer.Change(Timeout.Infinite, Timeout.Infinite);
 
-            // Последним шагом пишем клиенту сообщение подтверждения получения файла
-            await stream.WriteAsync(Encoding.ASCII.GetBytes("done"), 0, "done".Length);
+            // Последним шагом пишем клиенту подтверждающее сообщение о получении файла
+                                                                                                    // if (this.fileSize == new FileInfo(this.serverFileName).Length)
+            await tcpStream.WriteAsync(Encoding.Default.GetBytes("done"), 0, "done".Length);
 
             PrintSpeed();
-            Console.WriteLine("Файл получен удачно");
+            Console.WriteLine("Файл " + this.clientFileName + " [" + this.client.Client.RemoteEndPoint + "] " + " получен удачно");
         }
     }
 
@@ -65,32 +67,38 @@ public class FileHandler : IDisposable
     {
         string stringifiedBuffer = Encoding.Default.GetString(buffer);
         string[] data = stringifiedBuffer.Split('/');
-        this.fileName = data[0];
+        this.clientFileName = data[0];
         this.fileSize = long.Parse(data[1]);
-        Console.WriteLine(this.fileName);
     }
 
     private void CreateFile()
     {
-        string fullFileName;
-        if (!File.Exists("uploads/" + this.fileName))
+        if (!File.Exists("uploads/" + this.clientFileName))
         {
-            fullFileName = "uploads/" + this.fileName;
+            this.serverFileName = "uploads/" + this.clientFileName;
         }
         else
         {
-            fullFileName = "uploads/" + Random.Shared.Next()  + "_" + this.fileName;
+            this.serverFileName = "uploads/" + Random.Shared.Next()  + "_" + this.clientFileName;
         }
-        this.fileStream = new FileStream(fullFileName, FileMode.CreateNew);
+        this.fileStream = new FileStream(this.serverFileName, FileMode.CreateNew);
     }
 
     private void PrintSpeed()
     {
         TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+
         double totalSpeed = this.readSize / (now - this.startTime).TotalSeconds / 1024 / 1024;
         double currentSpeed = (double)(this.readSize - this.lastReadSize) / double.Min((now - this.startTime).TotalSeconds, 3) / 1024 / 1024;
         this.lastReadSize = this.readSize;
-        Console.WriteLine("общая скорость {0:F3} мнгновенная скорость {1:F3} МБ", totalSpeed, currentSpeed);
+
+        if (totalSpeed < 0.001) {
+            Console.WriteLine("Файл {0} [{1}] начал скачиваться", this.serverFileName, this.client.Client.RemoteEndPoint);
+        }
+        else
+        {
+            Console.WriteLine("Файл {2} [{3}]\n\t общая скорость {0:F3} мнгновенная скорость {1:F3} МБ", totalSpeed, currentSpeed, this.serverFileName, this.client.Client.RemoteEndPoint);
+        }
     }
 
     public void Dispose()
@@ -99,4 +107,3 @@ public class FileHandler : IDisposable
         this.client.Close();
     }
 }
-
